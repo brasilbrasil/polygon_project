@@ -1,0 +1,9 @@
+%check file association
+assoc .py
+
+%check path
+ftype Python.File
+
+%%%%%%%%%%%%%%
+cd "C:\Users\lfortini\code\polygon_project"
+convert_rastertopoly.py
