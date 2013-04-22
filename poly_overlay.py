@@ -1,19 +1,23 @@
 import arcpy, os
 
+# Set path to the root folder for input data
+rootDir = arcpy.GetParameterAsText(0)
+
 # Input variables
-root = "C:/Users/Eok/Documents/GitHub/polygon_project/"
-islandDir = root + "islands/"
-hawaiiFC = "ALL.shp"
+##root = "C:/Users/Eok/Documents/GitHub/polygon_project/"
+islandDir = rootDir + "\\data\\Islands\\"
+outputDir = rootDir + "\\output\\"
+hawaiiFC = "Main_Hawaiian_Islands_simple2.shp"
 hawaiiFCPath = islandDir + hawaiiFC
-outputCSVName = "report.csv"
-outputCSVPath = "C:/Users/Eok/Documents/GitHub/polygon_project/" + outputCSVName
-csvHeader = "Species Name,Vulnerability Index\n"
+outputCSVName = "\\SpeciesReport.csv"
+outputCSVPath = rootDir + outputCSVName
+csvHeader = "SPEC_NAME,VULNER_IDX\n"
 
 # Change environment to Islands subdirectory
 arcpy.env.workspace = islandDir
 
 # Set path to input selection polygon shapefile
-selectionFC = arcpy.GetParameterAsText(0)
+selectionFC = arcpy.GetParameterAsText(1)
 
 # Create feature layer from input selection polygon shapefile
 arcpy.MakeFeatureLayer_management(selectionFC, 'input_layer')
@@ -31,7 +35,7 @@ with arcpy.da.SearchCursor('hawaii_lyr', 'island') as cursor:
     # Loop through each overlapping island
     for row in cursor:
         # Build path to each individual island polygon shapefile
-        islandFC = islandDir + row[0] + ".shp"
+        islandFC = outputDir + row[0] + ".shp"
 
         # Create feature layer from individual island polygon to determine which species
         # extents overlap with the input polygon
