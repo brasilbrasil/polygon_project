@@ -4,13 +4,10 @@ import arcpy, os
 rootDir = arcpy.GetParameterAsText(0)
 
 # Input variables
-##root = "C:/Users/Eok/Documents/GitHub/polygon_project/"
 islandDir = rootDir + "\\data\\Islands\\"
 outputDir = rootDir + "\\output\\"
 hawaiiFC = "Main_Hawaiian_Islands_simple2.shp"
 hawaiiFCPath = islandDir + hawaiiFC
-outputCSVName = "\\SpeciesReport.csv"
-outputCSVPath = rootDir + outputCSVName
 csvHeader = "SPEC_NAME,VULNER_IDX\n"
 
 # Change environment to Islands subdirectory
@@ -18,6 +15,11 @@ arcpy.env.workspace = islandDir
 
 # Set path to input selection polygon shapefile
 selectionFC = arcpy.GetParameterAsText(1)
+
+# Set path to output CSV file
+outputCSVName = "\\SpeciesReport.csv"
+outputCSVRoot = arcpy.GetParameterAsText(2)
+outputCSVPath = outputCSVRoot + outputCSVName
 
 # Create feature layer from input selection polygon shapefile
 arcpy.MakeFeatureLayer_management(selectionFC, 'input_layer')
