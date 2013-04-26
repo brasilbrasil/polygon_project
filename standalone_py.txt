@@ -5,5 +5,9 @@ assoc .py
 ftype Python.File
 
 %%%%%%%%%%%%%%
+Y:
+cd "Y:\PICCC_analysis\polygon_project - Copy"
+convert_rastertopoly.py
+
 cd "C:\Users\lfortini\code\polygon_project"
 convert_rastertopoly.py

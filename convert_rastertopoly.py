@@ -2,14 +2,21 @@
 import arcpy, os, zipfile, fnmatch
 
 # Input variables
-rootDir = "C:/Users/Eok/Documents/GitHub/polygon_project/"
-inputDir = rootDir + "data/CEs/"
+server=True #if running script on server with full dataset
+if server:
+    rootDir = "Y:/PICCC_analysis/polygon_project - Copy/"
+    inputDir = "Y:/VA data/CEs/"
+    inputCSV ="Y:/VA data/CAO/"+"spp_habitat_requirements_poly.csv"
+else:
+    rootDir = "C:/Users/Eok/Documents/GitHub/polygon_project/"
+    inputDir = rootDir + "data/CEs/"
+    inputCSV = rootDir + "data/spp_aux_data.csv"
+
 islandDirName = "data/Islands/"
 islandDir = rootDir + islandDirName
 outputDirName = "output/"
 outputDir = rootDir + outputDirName
 outputFC = "allislands.shp"
-inputCSV = rootDir + "data/spp_aux_data.csv"
 fgdb = "species.gdb"
 outputGDB = outputDir + fgdb
 tableName = "VULNERABILITY"
@@ -19,41 +26,46 @@ speciestoolbox = "SpeciesTools.tbx"
 overwrite = False
 
 ### Set environment to CEs directory
-##arcpy.env.workspace = inputDir
-##
-### Create output directory if it doesn't already exist
-##try:
-##    os.mkdir(outputDir)
-##except:
-##    pass
-##
-##
-### Check to see if the allspecies.gdb exists, if not create it
-##if not os.path.exists(outputDir + fgdb):
-##    # Create a file geodatabase to hold the CSV table for joining to output polygon
-##    arcpy.CreateFileGDB_management(outputDir, fgdb)
-##
-##    # Import all rows of CSV file into file geodatabase
-##    arcpy.TableToTable_conversion(inputCSV, outputDir + fgdb, tableName, "", "", "")
-##
-### Retrieve list of raster from workspace (CEs directory)
-##rasterList = arcpy.ListRasters("*", "tif")
-##
-### Loop through list of rasters
-##for raster in rasterList:
-##    outPoly = outputDir + raster[:-4] + ".shp"
-##
-##    # Check to see if the polygons have been created
-##    if arcpy.Exists(outPoly) == False or overwrite == True:
-##        # Convert raster file to polygon without simplifying/smoothing
-##        arcpy.RasterToPolygon_conversion(raster, outPoly, "NO_SIMPLIFY")
-##
-##        # Add a species ID field to enable joining with vulnerability table later
-##        # The SPEC_ID field created will be a long integer that's non-nullable
-##        arcpy.AddField_management(outPoly, "SPEC_ID", "LONG", "", "", "", "", "NON_NULLABLE")
-##
-##        # Populate the SPEC_ID field with the 4 digit code from the file name of the input tif filename
-##        arcpy.CalculateField_management(outPoly, "SPEC_ID", int(raster[-8:-4]), "PYTHON_9.3", "")
+arcpy.env.workspace = inputDir
+
+# Create output directory if it doesn't already exist
+try:
+    os.mkdir(outputDir)
+except:
+    pass
+
+
+# Check to see if the allspecies.gdb exists, if not create it
+if not os.path.exists(outputDir + fgdb):
+    # Create a file geodatabase to hold the CSV table for joining to output polygon
+    arcpy.CreateFileGDB_management(outputDir, fgdb)
+
+    # Import all rows of CSV file into file geodatabase
+    arcpy.TableToTable_conversion(inputCSV, outputDir + fgdb, tableName, "", "", "")
+
+# Retrieve list of raster from workspace (CEs directory)
+rasterList = arcpy.ListRasters("*", "tif")
+
+# Loop through list of rasters
+for raster in rasterList:
+    if raster[0:1]=="C": #to process CCE rasters only
+        if int(raster[-8:-4])<1086: #there are a few non-native species that have model numbers >1085 that are excluded 
+            outPoly = outputDir + raster[:-4] + ".shp"
+
+            # Check to see if the polygons have been created
+            if arcpy.Exists(outPoly) == False or overwrite == True:
+                # Convert raster file to polygon without simplifying/smoothing
+                arcpy.RasterToPolygon_conversion(raster, outPoly, "NO_SIMPLIFY")
+        
+                # Add a species ID field to enable joining with vulnerability table later
+                # The SPEC_ID field created will be a long integer that's non-nullable
+                arcpy.AddField_management(outPoly, "SPEC_ID", "LONG", "", "", "", "", "NON_NULLABLE")
+        
+                # Populate the SPEC_ID field with the 4 digit code from the file name of the input tif filename
+                arcpy.CalculateField_management(outPoly, "SPEC_ID", int(raster[-8:-4]), "PYTHON_9.3", "")
+                print "doing " + raster
+            else:
+                print "already done with " + raster
 
 # Change environment to output subdirectory
 arcpy.env.workspace = outputDir
