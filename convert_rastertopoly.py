@@ -17,8 +17,8 @@ islandDirName = "data/Islands/"
 islandDir = rootDir + islandDirName
 outputDirName = "output/"
 outputDir = rootDir + outputDirName
-outputFCEshp = "islands_FCE.shp"
-outputCCEshp = "islands_CCE.shp"
+outputFCEshp = "ISLANDS_FCE.shp"
+outputCCEshp = "ISLANDS_CCE.shp"
 fgdb = "species.gdb"
 outputGDB = outputDir + fgdb
 tableName = "VULNERABILITY"
@@ -203,11 +203,11 @@ for island in islandList:
         # into a single multipart polygon
         arcpy.Dissolve_management(islandFCEPath, islandFCEPath2, "SPEC_ID")
 
-##        # Join species reference table to final polygons
-##        # joinedFieldList = ["spp","vulnerability"]
-##        # All fields are currently joined to final island polygon.
-##        # Since the values are simple, this should be minimal overhead.
-##        arcpy.JoinField_management(islandFCEPath2, "SPEC_ID", tablePath, "sp_code")
+        # Join species reference table to final polygons
+        # joinedFieldList = ["spp","vulnerability"]
+        # All fields are currently joined to final island polygon.
+        # Since the values are simple, this should be minimal overhead.
+        arcpy.JoinField_management(islandFCEPath2, "SPEC_ID", tablePath, "sp_code")
 
         # Delete intermediate island shapefiles
         arcpy.Delete_management(islandFCEPath)
