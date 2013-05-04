@@ -20,10 +20,13 @@ arcpy.env.overwriteOutput = True
 # Set path to input selection polygon shapefile
 selectionFC = arcpy.GetParameterAsText(1)
 
-# Set path to output CSV file
-outputCSVName = "\\SpeciesReport.csv"
-outputCSVRoot = arcpy.GetParameterAsText(2)
-outputCSVPath = outputCSVRoot + outputCSVName
+# Set the full path of the output CSV file
+# The default is the current directory of the script/toolbox +
+# protected_area_shapefile_folder/protected_area_vulnerability_report.csv
+# That path is configured in the toolbox.
+outputCSVPath = arcpy.GetParameterAsText(2)
+outputCSVFolder = outputCSVPath.rsplit('\\',1)[0]
+outputCSVName = outputCSVPath.rsplit('\\',1)[1]
 
 # Calculation functions
 compCheckBlock = """def compCheck(pFieldVal1, pFieldVal2):
@@ -35,6 +38,15 @@ compCheckBlock = """def compCheck(pFieldVal1, pFieldVal2):
         return "FUTURE"
     else:
         return "NONE" """
+
+
+#----- START PROCESSING -----#
+
+# Create the output folder for the csv file if it does not exist already.
+try:
+    os.mkdir(outputCSVFolder)
+except:
+    pass
 
 # Create feature layer from input selection polygon shapefile
 arcpy.MakeFeatureLayer_management(selectionFC, 'input_layer')
@@ -210,11 +222,11 @@ with arcpy.da.SearchCursor('hawaii_lyr', 'island') as cursor:
         # Loop through each overlapping species extent and write out the species name, vulnerability index, presence status,
         with arcpy.da.SearchCursor(outputJoin_FCPath, [cceSPPField, cceVulField, presField, cceIntx, fceIntx]) as xCursor:
             for xRow in xCursor:
-                tempWrite = xRow[0] + "," + str(xRow[1]) + "," + str(xRow[2]) + "," + str(xRow[3]) + "," + str(xRow[4]) + "\n"
+                tempWrite = xRow[0] + "," + str(float(xRow[1])) + "," + str(xRow[2]) + "," + str(float(xRow[3])) + "," + str(float(xRow[4])) + "\n"
                 f.write(tempWrite)
         f.close()
 
-        # Delete intermediate island shapefile
+        # Delete intermediate shapefiles
         arcpy.Delete_management(outputCCE_FCPath)
         arcpy.Delete_management(clipCCE)
         arcpy.Delete_management(outputFCE_FCPath)

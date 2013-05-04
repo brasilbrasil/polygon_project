@@ -27,6 +27,17 @@ overlayscript = "poly_overlay.py"
 speciestoolbox = "SpeciesTools.tbx"
 overwrite = False
 
+# General Functions
+# Check maximum value in raster to skip empty rasters
+def get_num_attributes(raster, value):
+	jnk = arcpy.GetRasterProperties_management(raster, value)
+	jnk = jnk.getOutput(0)
+	jnk = float(jnk)
+	return jnk
+
+
+#--- START SCRIPT ---#
+
 # Set environment to CEs directory
 arcpy.env.workspace = inputDir
 
@@ -46,12 +57,59 @@ if not os.path.exists(outputDir + fgdb):
     arcpy.TableToTable_conversion(inputCSV, outputDir + fgdb, tableName, "", "", "")
 
 # Retrieve list of raster from workspace (CEs directory)
-rasterList = arcpy.ListRasters("*", "tif")
+rasterList = arcpy.ListRasters("CCE*", "tif")
 
 # Loop through list of rasters
 for raster in rasterList:
     # Use the same file name for output but with a shapefile extension
     outPoly = outputDir + raster[:-4] + ".shp"
+
+##    # Check the tif aux xml file to determine if the tif is empty.
+##    # RasterToPolygon_conversion tool will fail if the raster is empty
+##    # Use the etree library to read the metadata xml file for the tif
+##    rasterXML = ET.parse(inputDir + raster + ".aux.xml")
+##    xmlRoot = rasterXML.getroot()
+##
+##    # Loop through the metadata xml for the MDI elements
+##    for mdi in xmlRoot.iter('MDI'):
+##        # Get the STATISTICS_MAXIMUM value.
+##        if (mdi.get('key') == 'STATISTICS_MAXIMUM'):
+##            mdiValue = float(mdi.text)
+##            # A value above 0 assumes that there is data.
+##            if (mdiValue > 0):
+    # Find model number from raster name
+    speciesNum = int(raster[-8:-4])
+
+    # There are a few non-native species that have model numbers > 1085 that are excluded
+    if speciesNum < 1086:
+        # Check to see if the polygons have been created
+        if arcpy.Exists(outPoly) == False or overwrite == True:
+##            # Process CCE rasters
+##            if raster[0:1]=="C":
+            # Convert raster file to polygon without simplifying/smoothing
+            arcpy.RasterToPolygon_conversion(raster, outPoly, "NO_SIMPLIFY")
+
+            # Add a species ID field to enable joining with vulnerability table later
+            # The SPEC_ID field created will be a long integer that's non-nullable
+            arcpy.AddField_management(outPoly, "SPEC_ID", "LONG", "", "", "", "", "NON_NULLABLE")
+
+            # Populate the SPEC_ID field with the 4 digit code from the file name of the input tif filename
+            arcpy.CalculateField_management(outPoly, "SPEC_ID", speciesNum, "PYTHON_9.3", "")
+            print "doing " + raster
+        else:
+            print "already done with " + raster
+
+# Retrieve list of raster from workspace (CEs directory)
+rasterList = arcpy.ListRasters("FCE*", "tif")
+
+# Loop through list of rasters
+for raster in rasterList:
+    # Use the same file name for output but with a shapefile extension
+    outPoly = outputDir + raster[:-4] + ".shp"
+
+##    # Check to see if raster has any data first before processing
+##    rasMax = get_num_attributes(raster, "MAXIMUM")
+##    if (rasMax > 0.0):
 
     # Check the tif aux xml file to determine if the tif is empty.
     # RasterToPolygon_conversion tool will fail if the raster is empty
@@ -66,6 +124,7 @@ for raster in rasterList:
             mdiValue = float(mdi.text)
             # A value above 0 assumes that there is data.
             if (mdiValue > 0):
+
                 # Find model number from raster name
                 speciesNum = int(raster[-8:-4])
 
@@ -73,31 +132,19 @@ for raster in rasterList:
                 if speciesNum < 1086:
                     # Check to see if the polygons have been created
                     if arcpy.Exists(outPoly) == False or overwrite == True:
-                        # Process CCE rasters
-                        if raster[0:1]=="C":
-                            # Convert raster file to polygon without simplifying/smoothing
-                            arcpy.RasterToPolygon_conversion(raster, outPoly, "NO_SIMPLIFY")
 
-                            # Add a species ID field to enable joining with vulnerability table later
-                            # The SPEC_ID field created will be a long integer that's non-nullable
-                            arcpy.AddField_management(outPoly, "SPEC_ID", "LONG", "", "", "", "", "NON_NULLABLE")
+        ##                # Process FCE rasters
+        ##                elif raster[0:1] == "F":
+                        # Convert raster file to polygon without simplifying/smoothing
+                        arcpy.RasterToPolygon_conversion(raster, outPoly, "NO_SIMPLIFY")
 
-                            # Populate the SPEC_ID field with the 4 digit code from the file name of the input tif filename
-                            arcpy.CalculateField_management(outPoly, "SPEC_ID", speciesNum, "PYTHON_9.3", "")
-                            print "doing " + raster
+                        # Add a species ID field to enable joining with vulnerability table later
+                        # The SPEC_ID field created will be a long integer that's non-nullable
+                        arcpy.AddField_management(outPoly, "SPEC_ID", "LONG", "", "", "", "", "NON_NULLABLE")
 
-                        # Process FCE rasters
-                        elif raster[0:1] == "F":
-                            # Convert raster file to polygon without simplifying/smoothing
-                            arcpy.RasterToPolygon_conversion(raster, outPoly, "NO_SIMPLIFY")
-
-                            # Add a species ID field to enable joining with vulnerability table later
-                            # The SPEC_ID field created will be a long integer that's non-nullable
-                            arcpy.AddField_management(outPoly, "SPEC_ID", "LONG", "", "", "", "", "NON_NULLABLE")
-
-                            # Populate the SPEC_ID field with the 4 digit code from the file name of the input tif filename
-                            arcpy.CalculateField_management(outPoly, "SPEC_ID", speciesNum, "PYTHON_9.3", "")
-                            print "doing " + raster
+                        # Populate the SPEC_ID field with the 4 digit code from the file name of the input tif filename
+                        arcpy.CalculateField_management(outPoly, "SPEC_ID", speciesNum, "PYTHON_9.3", "")
+                        print "doing " + raster
                     else:
                         print "already done with " + raster
 
@@ -214,7 +261,7 @@ for island in islandList:
 
 
 # Create a zip file of the results in the same directory as the script and prepare to write
-zf = zipfile.ZipFile('SpeciesTools.zip', mode='w')
+zf = zipfile.ZipFile('SpeciesTools.zip', 'w', zipfile.ZIP_DEFLATED)
 
 # Loop through the data/Islands directory
 for tempRoot, dirs, files in os.walk(islandDirName):
