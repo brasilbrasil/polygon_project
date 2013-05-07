@@ -13,8 +13,8 @@ fgdb = "species.gdb"
 outputGDB = outputDir + fgdb
 csvHeader = "SPEC_NAME,VULNER_IDX,PRESENCE,CUR_OVERLAP_PCT,FUT_OVERLAP_PCT\n"
 
-# Change environment to Islands subdirectory
-arcpy.env.workspace = outputGDB
+# Set environment
+arcpy.env.workspace = outputDir
 arcpy.env.overwriteOutput = True
 
 # Set path to input selection polygon shapefile
@@ -64,52 +64,67 @@ with arcpy.da.SearchCursor('hawaii_lyr', 'island') as cursor:
     # Loop through each overlapping island
     for row in cursor:
 
+        # Get the area of the input overlay polygon for use in calculations later
+        inputArea = 0;
+        with arcpy.da.SearchCursor('input_layer', ['SHAPE@AREA']) as iCursor:
+            for iRow in iCursor:
+                inputArea = iRow[0]
+
+
         #--- CREATE CCE SELECTION AND INTERSECTION SHAPEFILE ---#
 
         # Build path to each individual island polygon shapefile
         islandCCE_FC = outputDir + row[0] + "_CCE.shp"
         islandCCE_Lyr = row[0] + "_CSel"
-        outputCCE_FC = islandCCE_Lyr + ".shp"
-        outputCCE_FCPath = os.path.join(outputDir, outputCCE_FC)
-##        outputCCE_FCPath = os.path.join(outputGDB, islandCCE_Lyr)
 
         # Create feature layer from individual island polygon to determine which species
-        # extents overlap with the input polygon
+        # extents overlap with the input overlay polygon
         arcpy.MakeFeatureLayer_management(islandCCE_FC, islandCCE_Lyr)
+
+        # Get total record from individual island polygon
+        cceTotalRecords = int(arcpy.GetCount_management(islandCCE_Lyr).getOutput(0))
 
         # Perform spatial selection from each island
         arcpy.SelectLayerByLocation_management(islandCCE_Lyr, 'intersect', 'input_layer')
 
-        # Save the spatial selection to intermediate shapefile
-        arcpy.FeatureClassToFeatureClass_conversion(islandCCE_Lyr, outputDir, outputCCE_FC)
-##        arcpy.FeatureClassToGeodatabase_conversion(islandCCE_Lyr, outputGDB)
+        # Loop through and subdivide the selection into maximum subsets of 200 features.
+        # This subdivision is needed to work around an issue where the clip geoprocessing
+        # tool might fail if feature count starts to get past 200.
+        increment = 200
+        cceCount = 1
+        cceStartIndex = 0
+        cceEndIndex = cceStartIndex + increment
 
-        # Add an area field to the CCE selection shapefile
-        arcpy.AddField_management(outputCCE_FCPath, "sppArea", "DOUBLE", "", "", "", "", "NON_NULLABLE")
+        # Start subdivision loop
+        while cceStartIndex <= cceTotalRecords:
+            # Select subset of features based on FID
+            outputCCE_FC = islandCCE_Lyr + "_" + str(cceCount) + ".shp"
+            outputCCE_FCPath = os.path.join(outputDir, outputCCE_FC)
+            arcpy.Select_analysis(islandCCE_Lyr, outputCCE_FCPath, '"FID" >= ' + str(cceStartIndex) + ' AND "FID" < ' + str(cceEndIndex))
 
-        # Populate the new field with the area value from the SHAPE field
-        arcpy.CalculateField_management(outputCCE_FCPath, "sppArea", "!SHAPE.area!", "PYTHON_9.3", "")
+            # Clip out the extent of the selection polygon
+            clipCCE = os.path.join(outputDir, row[0] + "_CClp_" + str(cceCount) + ".shp")
+            arcpy.Clip_analysis(outputCCE_FCPath, 'input_layer', clipCCE, "")
 
-##        # Create an intersection between the selection polygon and the selected species polygons
-##        inFCs1 = ['input_layer', outputCCE_FCPath]
-##        inFCs1 = ['input_layer', islandCCE_Lyr]
-##        intersectCCE = os.path.join(outputDir, row[0] + "_CInt.shp")
-##        intersectCCE = row[0] + "_CCE_Intersect"
-##        clusterTolerance = 1
-##        arcpy.Intersect_analysis(inFCs1, intersectCCE, "", 0, "INPUT")
+            # Increment counters
+            cceCount += 1
+            cceStartIndex = cceEndIndex
+            cceEndIndex += increment
 
-        # Clip out the extent of the selection polygon
-        clipCCE = os.path.join(outputDir, row[0] + "_CClp.shp")
-        arcpy.Clip_analysis(outputCCE_FCPath, 'input_layer', clipCCE, "")
+        # Merge all subsets back into single shapefile
+        allCCESelections = arcpy.ListFeatureClasses("*_CClp_*", "POLYGON")
+        clipCCE_Merge = os.path.join(outputDir, row[0] + "_CClp.shp")
+        arcpy.Merge_management(allCCESelections, clipCCE_Merge)
 
         # Add an area field to the CCE selection shapefile to hold the percentage calculation
-        arcpy.AddField_management(clipCCE, "inxPercent", "DOUBLE", "", "", "", "", "NON_NULLABLE")
+        arcpy.AddField_management(clipCCE_Merge, "inxPercent", "DOUBLE", "", "", "", "", "NON_NULLABLE")
 
         # Calculate the percentage of area species habitat extent covered by the selection polygon
-        arcpy.CalculateField_management(clipCCE, "inxPercent", "!SHAPE.area!/!sppArea!", "PYTHON_9.3", "")
+        # Divide the area of the intersected polygon by the area of the input overlay polygon
+        arcpy.CalculateField_management(clipCCE_Merge, "inxPercent", "!SHAPE.area!/" + str(inputArea), "PYTHON_9.3", "")
 
         # Get current field list from CCE Intersection shapefile
-        cceFields = arcpy.ListFields(clipCCE)
+        cceFields = arcpy.ListFields(clipCCE_Merge)
 
         # Build list of fields to drop
         keepFields = ["FID","Shape","spp","sp_code","vulnerabil","inxPercent"]
@@ -119,10 +134,10 @@ with arcpy.da.SearchCursor('hawaii_lyr', 'island') as cursor:
                 dropFields.append(cceField.name)
 
         # Drop fields from CCE Intersection shapefile
-        arcpy.DeleteField_management(clipCCE, dropFields)
+        arcpy.DeleteField_management(clipCCE_Merge, dropFields)
 
         # Create CCE Intersection feature layer to work with
-        arcpy.MakeFeatureLayer_management(clipCCE, "clipCCE_Lyr")
+        arcpy.MakeFeatureLayer_management(clipCCE_Merge, "clipCCE_Lyr")
 
 
         #--- CREATE FCE SELECTION AND INTERSECTION SHAPEFILE ---#
@@ -130,46 +145,55 @@ with arcpy.da.SearchCursor('hawaii_lyr', 'island') as cursor:
         # Build path to each individual island polygon shapefile
         islandFCE_FC = outputDir + row[0] + "_FCE.shp"
         islandFCE_Lyr = row[0] + "_FSel"
-        outputFCE_FC = islandFCE_Lyr + ".shp"
-        outputFCE_FCPath = os.path.join(outputDir, outputFCE_FC)
-##        outputFCE_FCPath = os.path.join(outputGDB, islandFCE_Lyr)
 
         # Create feature layer from individual island polygon to determine which species
-        # extents overlap with the input polygon
+        # extents overlap with the input overlay polygon
         arcpy.MakeFeatureLayer_management(islandFCE_FC, islandFCE_Lyr)
+
+        # Get total record from individual island polygon
+        fceTotalRecords = int(arcpy.GetCount_management(islandFCE_Lyr).getOutput(0))
 
         # Perform spatial selection from each island
         arcpy.SelectLayerByLocation_management(islandFCE_Lyr, 'intersect', 'input_layer')
 
-        # Save the spatial selection to intermediate shapefile
-        arcpy.FeatureClassToFeatureClass_conversion(islandFCE_Lyr, outputDir, outputFCE_FC)
-##        arcpy.FeatureClassToGeodatabase_conversion(islandFCE_Lyr, outputGDB)
+        # Loop through and subdivide the selection into maximum subsets of 200 features.
+        # This subdivision is needed to work around an issue where the clip geoprocessing
+        # tool might fail if feature count starts to get past 200.
+        increment = 200
+        fceCount = 1
+        fceStartIndex = 0
+        fceEndIndex = fceStartIndex + increment
 
-        # Add an area field to the CCE selection shapefile
-        arcpy.AddField_management(outputFCE_FCPath, "sppArea", "DOUBLE", "", "", "", "", "NON_NULLABLE")
+        # Start subdivision loop
+        while fceStartIndex <= fceTotalRecords:
+            # Select subset of features based on FID
+            outputFCE_FC = islandFCE_Lyr + "_" + str(fceCount) + ".shp"
+            outputFCE_FCPath = os.path.join(outputDir, outputFCE_FC)
+            arcpy.Select_analysis(islandFCE_Lyr, outputFCE_FCPath, '"FID" >= ' + str(fceStartIndex) + ' AND "FID" < ' + str(fceEndIndex))
 
-        # Populate the new field with the area value from the SHAPE field
-        arcpy.CalculateField_management(outputFCE_FCPath, "sppArea", "!SHAPE.area!", "PYTHON_9.3", "")
+            # Clip out the extent of the selection polygon
+            clipFCE = os.path.join(outputDir, row[0] + "_FClp_" + str(fceCount) + ".shp")
+            arcpy.Clip_analysis(outputFCE_FCPath, 'input_layer', clipFCE, "")
 
-##        # Process: Find all stream crossings (points)
-##        inFCs2 = ['input_layer', outputFCE_FCPath]
-##        inFCs2 = ['input_layer', islandFCE_Lyr]
-##        intersectFCE = os.path.join(outputDir, row[0] + "_FInt.shp")
-##        intersectFCE = row[0] + "_FCE_Intersect"
-##        arcpy.Intersect_analysis(inFCs2, intersectFCE, "", clusterTolerance, "INPUT")
+            # Increment counters
+            fceCount += 1
+            fceStartIndex = fceEndIndex
+            fceEndIndex += increment
 
-        # Clip out the extent of the selection polygon
-        clipFCE = os.path.join(outputDir, row[0] + "_FClp.shp")
-        arcpy.Clip_analysis(outputFCE_FCPath, 'input_layer', clipFCE, "")
+        # Merge all subsets back into single shapefile
+        allFCESelections = arcpy.ListFeatureClasses("*_FClp_*", "POLYGON")
+        clipFCE_Merge = os.path.join(outputDir, row[0] + "_FClp.shp")
+        arcpy.Merge_management(allFCESelections, clipFCE_Merge)
 
         # Add an area field to the CCE selection shapefile to hold the percentage calculation
-        arcpy.AddField_management(clipFCE, "inxPercent", "DOUBLE", "", "", "", "", "NON_NULLABLE")
+        arcpy.AddField_management(clipFCE_Merge, "inxPercent", "DOUBLE", "", "", "", "", "NON_NULLABLE")
 
         # Calculate the percentage of area species habitat extent covered by the selection polygon
-        arcpy.CalculateField_management(clipFCE, "inxPercent", "!SHAPE.area!/!sppArea!", "PYTHON_9.3", "")
+        # Divide the area of the intersected polygon by the area of the input overlay polygon
+        arcpy.CalculateField_management(clipFCE_Merge, "inxPercent", "!SHAPE.area!/" + str(inputArea), "PYTHON_9.3", "")
 
         # Get current field list from FCE Intersection shapefile
-        fceFields = arcpy.ListFields(clipFCE)
+        fceFields = arcpy.ListFields(clipFCE_Merge)
 
         # Build list of fields to drop
         dropFields = []
@@ -178,10 +202,10 @@ with arcpy.da.SearchCursor('hawaii_lyr', 'island') as cursor:
                 dropFields.append(fceField.name)
 
         # Drop fields from FCE Intersection shapefile
-        arcpy.DeleteField_management(clipFCE, dropFields)
+        arcpy.DeleteField_management(clipFCE_Merge, dropFields)
 
         # Create FCE Intersection feature layer to work with
-        arcpy.MakeFeatureLayer_management(clipFCE, "clipFCE_Lyr")
+        arcpy.MakeFeatureLayer_management(clipFCE_Merge, "clipFCE_Lyr")
 
 
         #--- CREATE JOINED SHAPEFILE FROM CCE INTERSECTION AND FCE INTERSECTION ---#
@@ -200,16 +224,19 @@ with arcpy.da.SearchCursor('hawaii_lyr', 'island') as cursor:
         # Save the joined shapefile to disk
         outputJoin_FC = row[0] + "_Joined.shp"
         outputJoin_FCPath = os.path.join(outputDir, outputJoin_FC)
-##        outputJoin_FCPath = os.path.join(outputGDB, islandCCE_Lyr + "_1")
         arcpy.FeatureClassToFeatureClass_conversion("clipCCE_Lyr", outputDir, outputJoin_FC)
-##        arcpy.FeatureClassToGeodatabase_conversion(islandCCE_Lyr, outputGDB)
-
         # Add the presence field
         arcpy.AddField_management(outputJoin_FCPath, presField, "TEXT", "", "", 10)
 
         # Check the vulnerability field for both the CCE and FCE models.
         # Set the presence field value based on compCheckBlock test.
         arcpy.CalculateField_management(outputJoin_FCPath, presField, "compCheck(!"+cceVulField+"!,!"+fceVulField+"!)", "PYTHON_9.3", compCheckBlock)
+
+        # Sort the final result by vulnerability
+        outputSort_FC = row[0] + "_Sorted.shp"
+        outputSort_FCPath = os.path.join(outputDir, outputSort_FC)
+        sort_fields = [[cceVulField, "ASCENDING"]]
+        arcpy.Sort_management(outputJoin_FCPath, outputSort_FCPath, sort_fields, "")
 
 
         #--- CREATE THE CSV REPORT ---#
@@ -220,15 +247,15 @@ with arcpy.da.SearchCursor('hawaii_lyr', 'island') as cursor:
         f.write(csvHeader)
 
         # Loop through each overlapping species extent and write out the species name, vulnerability index, presence status,
-        with arcpy.da.SearchCursor(outputJoin_FCPath, [cceSPPField, cceVulField, presField, cceIntx, fceIntx]) as xCursor:
+        with arcpy.da.SearchCursor(outputSort_FCPath, [cceSPPField, cceVulField, presField, cceIntx, fceIntx]) as xCursor:
             for xRow in xCursor:
                 tempWrite = xRow[0] + "," + str(float(xRow[1])) + "," + str(xRow[2]) + "," + str(float(xRow[3])) + "," + str(float(xRow[4])) + "\n"
                 f.write(tempWrite)
         f.close()
 
-        # Delete intermediate shapefiles
-        arcpy.Delete_management(outputCCE_FCPath)
-        arcpy.Delete_management(clipCCE)
-        arcpy.Delete_management(outputFCE_FCPath)
-        arcpy.Delete_management(clipFCE)
-        arcpy.Delete_management(outputJoin_FCPath)
+        # Delete all temporary data based on shapefile name length
+        # All original source island shapefiles have 10 character file names.
+        allFCs = arcpy.ListFeatureClasses()
+        for fc in allFCs:
+            if (len(fc) != 10):
+                arcpy.Delete_management(fc)
