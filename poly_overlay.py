@@ -235,7 +235,7 @@ with arcpy.da.SearchCursor('hawaii_lyr', 'island') as cursor:
         # Sort the final result by vulnerability
         outputSort_FC = row[0] + "_Sorted.shp"
         outputSort_FCPath = os.path.join(outputDir, outputSort_FC)
-        sort_fields = [[cceVulField, "ASCENDING"]]
+        sort_fields = [[cceVulField, "DESCENDING"]]
         arcpy.Sort_management(outputJoin_FCPath, outputSort_FCPath, sort_fields, "")
 
 
