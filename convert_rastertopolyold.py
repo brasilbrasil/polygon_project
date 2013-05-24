@@ -1,18 +1,13 @@
 # Import libraries
 import arcpy, os, zipfile, fnmatch, xml
 import xml.etree.ElementTree as ET
-import csv
 
 # Input variables
-area_limit=50.0 #minimum sq km to simplify features
-server = True #if running script on server with full dataset
+server = False #if running script on server with full dataset
 if server:
-    rootDir = "C:/Users/lfortini/Dropbox/code/polygon_project - Copy/"
-    inputDir = rootDir + "data/CEs/"
-    inputCSV = rootDir + "data/spp_aux_data.csv"
-    #rootDir = "Y:/PICCC_analysis/polygon_project - Copy2/"
-    #inputDir = "Y:/VA data/CEs/"
-    #inputCSV ="Y:/VA data/CAO/"+"spp_habitat_requirements_poly.csv"
+    rootDir = "Y:/PICCC_analysis/polygon_project - Copy/"
+    inputDir = "Y:/VA data/CEs/"
+    inputCSV ="Y:/VA data/CAO/"+"spp_habitat_requirements_poly.csv"
 else:
     rootDir = "C:/Users/Eok/Documents/GitHub/polygon_project/"
     inputDir = rootDir + "data/CEs/"
@@ -29,7 +24,7 @@ outputGDB = outputDir + fgdb
 tableName = "VULNERABILITY"
 tablePath = outputDir + fgdb + "/" + tableName
 overlayscript = "poly_overlay.py"
-speciestoolbox = "HIplantVA.tbx"
+speciestoolbox = "SpeciesTools.tbx"
 overwrite = False
 
 # General Functions
@@ -40,21 +35,6 @@ def get_num_attributes(raster, value):
 	jnk = float(jnk)
 	return jnk
 
-#SPECIES NOMENCLATURE TRANSLATION AND MODEL CODE LIST
-data_dir=rootDir+"data/" 
-csvname="%sspp_cce_area_data.csv" %(data_dir)
-f = open(csvname, 'rb') #http://stackoverflow.com/questions/3428532/how-to-import-a-csv-file-using-python-with-headers-intact-where-first-column-is
-reader = csv.reader(f)
-headers = reader.next()
-column = {}
-for h in headers:
-    column[h] = []
-for row in reader:
-   for h, v in zip(headers, row):
-     column[h].append(v)
-
-hab_sp_code=column['sp_code']
-spp_CCE_area=column['CCE_Area']
 
 #--- START SCRIPT ---#
 
@@ -107,12 +87,7 @@ for raster in rasterList:
 ##            # Process CCE rasters
 ##            if raster[0:1]=="C":
             # Convert raster file to polygon without simplifying/smoothing
-            Sp_index=hab_sp_code.index(str(speciesNum))
-            sp_CCE_area=spp_CCE_area[Sp_index]
-            if sp_CCE_area<area_limit:
-                arcpy.RasterToPolygon_conversion(raster, outPoly, "NO_SIMPLIFY")
-            else:
-                arcpy.RasterToPolygon_conversion(raster, outPoly, "SIMPLIFY")
+            arcpy.RasterToPolygon_conversion(raster, outPoly, "NO_SIMPLIFY")
 
             # Add a species ID field to enable joining with vulnerability table later
             # The SPEC_ID field created will be a long integer that's non-nullable
