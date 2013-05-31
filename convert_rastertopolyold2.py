@@ -10,8 +10,6 @@ if server:
     rootDir = "C:/Users/lfortini/Dropbox/code/polygon_project - Copy/"
     inputDir = rootDir + "data/CEs/"
     inputCSV = rootDir + "data/spp_aux_data.csv"
-    inputCSV2 = rootDir + "data/tool_aux_data.csv"
-
     #rootDir = "Y:/PICCC_analysis/polygon_project - Copy2/"
     #inputDir = "Y:/VA data/CEs/"
     #inputCSV ="Y:/VA data/CAO/"+"spp_habitat_requirements_poly.csv"
@@ -19,7 +17,6 @@ else:
     rootDir = "C:/Users/Eok/Documents/GitHub/polygon_project/"
     inputDir = rootDir + "data/CEs/"
     inputCSV = rootDir + "data/spp_aux_data.csv"
-    inputCSV2 = rootDir + "data/tool_aux_data.csv"
 
 islandDirName = "data/Islands/"
 islandDir = rootDir + islandDirName
@@ -314,9 +311,6 @@ zf.write(overlayscript)
 # Zip the SpeciesToolbox
 # The SpeciesToolbox is currently expected to be in the same directory as this script
 zf.write(speciestoolbox)
-
-# Zip the csv file with auxiliary data for each species
-zf.write(inputCSV2)
 
 # Close out zip file to stop writing
 zf.close()
