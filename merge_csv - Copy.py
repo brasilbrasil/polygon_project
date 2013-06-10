@@ -3,7 +3,7 @@ rootDir = "C:/Users/lfortini/Dropbox/code/polygon_project/"
 inputDir = rootDir + "data/CEs/"
 inputCSV1 = rootDir + "data/merge_test_data1.csv"
 inputCSV2 = rootDir + "data/merge_test_data2.csv"
-outputCSV = "test.csv"
+outputCSV = rootDir+ "test.csv"
 
 import csv
 
