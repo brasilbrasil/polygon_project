@@ -1,4 +1,4 @@
-import arcpy, os
+import arcpy, os, csv, shutil
 
 # Set path to the root folder for input data
 rootDir = arcpy.GetParameterAsText(0)
@@ -11,7 +11,7 @@ hawaiiFC = "Main_Hawaiian_Islands_simple2.shp"
 hawaiiFCPath = islandDir + hawaiiFC
 fgdb = "species.gdb"
 outputGDB = outputDir + fgdb
-csvHeader = "SPEC_NAME,VULNER_IDX,PRESENCE,CUR_OVERLAP_PCT,FUT_OVERLAP_PCT\n"
+csvHeader = "spec_name,sp_code,vulner_idx,presence,cur_overlap_pct,fut_overlap_pct\n"
 
 # Set environment
 arcpy.env.workspace = outputDir
@@ -20,15 +20,19 @@ arcpy.env.overwriteOutput = True
 # Set path to input selection polygon shapefile
 selectionFC = arcpy.GetParameterAsText(1)
 
-# Set the full path of the output CSV file
+# Set the full path of the initial output CSV file
 # The default is the current directory of the script/toolbox +
 # protected_area_shapefile_folder/protected_area_vulnerability_report.csv
 # That path is configured in the toolbox.
 outputCSVPath = arcpy.GetParameterAsText(2)
 outputCSVFolder = outputCSVPath.rsplit('\\',1)[0]
 outputCSVName = outputCSVPath.rsplit('\\',1)[1]
+initCSVPath = os.path.join(outputDir, "init.csv")
 
-# Calculation functions
+# Auxillary table path
+appendCSVPath = arcpy.GetParameterAsText(3)
+
+# Calculation Function
 compCheckBlock = """def compCheck(pFieldVal1, pFieldVal2):
     if (pFieldVal1 > 0 and pFieldVal2 > 0):
         return "BOTH"
@@ -38,6 +42,23 @@ compCheckBlock = """def compCheck(pFieldVal1, pFieldVal2):
         return "FUTURE"
     else:
         return "NONE" """
+
+# CSV Function
+# Merge two dictionaries based on a matching field
+# http://stackoverflow.com/questions/9483051/join-two-csv-files-in-python-using-dictreader
+def mergeTables(dictreader1, dictreader2):
+    dictreader2 = list(dictreader2)
+    matchedlist = []
+    for dictline1 in dictreader1:
+        for dictline2 in dictreader2:
+            # "Join" the records based on the sp_code field
+            if dictline1['sp_code'] == dictline2['sp_code']:
+                entry = dictline1.copy()
+                # The update function will add the dictionary line 1 and 2
+                # together and drop any matching fields.
+                entry.update(dictline2)
+                matchedlist.append(entry)
+    return matchedlist
 
 
 #----- START PROCESSING -----#
@@ -213,6 +234,7 @@ with arcpy.da.SearchCursor('hawaii_lyr', 'island') as cursor:
         # Field variables
         cceVulField = 'vulnerabil'
         cceSPPField = 'spp'
+        cceSPCodeField = 'sp_code'
         cceIntx = 'inxPercent'
         fceVulField = row[0] + '_FClp_vu'
         fceIntx = row[0] + '_FClp_in'
@@ -243,15 +265,15 @@ with arcpy.da.SearchCursor('hawaii_lyr', 'island') as cursor:
 
         # Open a new file to write
         # This function is set to automatically overwrite any file with the same input name.
-        f = open(outputCSVPath, 'w')
-        f.write(csvHeader)
+        initCSV = open(initCSVPath, 'w')
+        initCSV.write(csvHeader)
 
         # Loop through each overlapping species extent and write out the species name, vulnerability index, presence status,
-        with arcpy.da.SearchCursor(outputSort_FCPath, [cceSPPField, cceVulField, presField, cceIntx, fceIntx]) as xCursor:
+        with arcpy.da.SearchCursor(outputSort_FCPath, [cceSPPField, cceSPCodeField, cceVulField, presField, cceIntx, fceIntx]) as xCursor:
             for xRow in xCursor:
-                tempWrite = xRow[0] + "," + str(float(xRow[1])) + "," + str(xRow[2]) + "," + str(float(xRow[3])) + "," + str(float(xRow[4])) + "\n"
-                f.write(tempWrite)
-        f.close()
+                tempWrite = xRow[0] + "," + str(int(xRow[1])) + "," + str(float(xRow[2])) + "," + str(xRow[3]) + "," + str(float(xRow[4])) + "," + str(float(xRow[5])) + "\n"
+                initCSV.write(tempWrite)
+        initCSV.close()
 
         # Delete all temporary data based on shapefile name length
         # All original source island shapefiles have 10 character file names.
@@ -259,3 +281,60 @@ with arcpy.da.SearchCursor('hawaii_lyr', 'island') as cursor:
         for fc in allFCs:
             if (len(fc) != 10):
                 arcpy.Delete_management(fc)
+
+
+        # --- START PROCESSING CSV FILES --- #
+
+        # Check to see if appending table exists
+        if os.path.exists(appendCSVPath):
+
+            # Read input csv files as dictionaries
+            dFile1 = open(initCSVPath, "rb" )
+            dReader1 = csv.DictReader(dFile1)
+
+            dFile2 = open(appendCSVPath, "rb" )
+            dReader2 = csv.DictReader(dFile2)
+
+            # Call the matching and appending function
+            finalRecords = mergeTables(dReader1, dReader2)
+
+            # Close access to the csv files
+            dFile1.close()
+            dFile2.close()
+
+            # Read the input csv files again as raw csvs
+            # Get the field names from each csv
+            headerFile1 = open(initCSVPath, "rb")
+            reader1 = csv.reader(headerFile1)
+            headers1 = reader1.next()
+
+            headerFile2 = open(appendCSVPath, "rb")
+            reader2 = csv.reader(headerFile2)
+            headers2 = reader2.next()
+
+            # Build a single list of fieldnames
+            for hdrElement in headers2:
+                if hdrElement not in headers1:
+                    headers1.append(hdrElement)
+
+            # Create the ouput CSV
+            finalCSV = open(outputCSVPath, "wb")
+            finalWriter = csv.DictWriter(finalCSV, delimiter=',', fieldnames=headers1)
+            finalWriter.writer.writerow(headers1)
+            finalWriter.writerows(finalRecords)
+            finalCSV.close()
+
+            # Close access to the csv files
+            headerFile1.close()
+            headerFile2.close()
+
+            # Clean up temporary CSV
+            os.remove(initCSVPath)
+
+        # If the appending table does not exist
+        else:
+            # Copy the file using the final output name/path
+            shutil.copy2(initCSVPath, outputCSVPath)
+
+            # Clean up temporary CSV
+            os.remove(initCSVPath)
