@@ -6,7 +6,6 @@ rootDir = arcpy.GetParameterAsText(0)
 # Input variables
 islandDir = rootDir + "\\data\\Islands\\"
 outputDir = rootDir + "\\output\\"
-outputTable = "C:/Users/Eok/Documents/GitHub/polygon_project/output/species.gdb/ccetable"
 hawaiiFC = "Main_Hawaiian_Islands_simple2.shp"
 hawaiiFCPath = islandDir + hawaiiFC
 fgdb = "species.gdb"
@@ -30,7 +29,7 @@ outputCSVName = outputCSVPath.rsplit('\\',1)[1]
 initCSVPath = os.path.join(outputDir, "init.csv")
 
 # Auxillary table path
-appendCSVPath = arcpy.GetParameterAsText(3)
+appendCSVPath = os.path.join(rootDir, "data/tool_aux_data.csv")
 
 # Calculation Function
 compCheckBlock = """def compCheck(pFieldVal1, pFieldVal2):
